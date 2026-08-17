@@ -1,0 +1,894 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>The Little Explorer's Adventure</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;user-select:none}
+    body{display:flex;align-items:center;justify-content:center;min-height:100vh;background:#dfeff2;font-family:Arial,Helvetica,sans-serif}
+    #game-container{width:900px;height:550px;border-radius:18px;overflow:hidden;border:8px solid #2d3748;background:linear-gradient(#9be3ff,#c7f0d8);position:relative;box-shadow:0 12px 30px rgba(0,0,0,.25)}
+    .scene{position:absolute;inset:0;display:none}
+    .scene.active{display:block}
+
+    /* HUD */
+    .hud{position:absolute;top:14px;right:18px;background:rgba(255,255,255,.95);border:4px solid #2d3748;border-radius:16px;padding:8px 14px;font-weight:700;color:#2d3748;z-index:120}
+    #scene-label{font-size:16px;margin-bottom:4px;text-align:center}
+    .counter{font-size:18px;text-align:center}
+
+    /* feedback */
+    .feedback{position:absolute;top:80px;left:50%;transform:translateX(-50%);background:#ff6b6b;color:white;padding:8px 16px;border-radius:14px;border:3px solid #2d3748;font-weight:800;opacity:0;pointer-events:none;z-index:200}
+
+    /* Shared scenery */
+    .sky{position:absolute;inset:0;background:linear-gradient(#87ceff,#bff0c9);z-index:0}
+    .sun{position:absolute;left:40px;top:24px;width:70px;height:70px;border-radius:50%;background:#f6d35a;border:4px solid #2d3748;box-shadow:0 0 18px #f6d35a;z-index:2}
+    .cloud{position:absolute;background:#fff;border:4px solid #2d3748;border-radius:40px;height:48px;z-index:3;box-shadow:0 6px 0 rgba(0,0,0,0.03)}
+    .cloud::before,.cloud::after{content:"";position:absolute;background:#fff;border:4px solid #2d3748;border-radius:50%}
+    .cloud::before{width:48px;height:48px;left:8px;top:-22px}
+    .cloud::after{width:36px;height:36px;right:8px;top:-16px}
+    /* add an extra puff for fluffiness */
+    .cloud span{position:absolute;width:40px;height:40px;background:#fff;border:4px solid #2d3748;border-radius:50%;left:36px;top:-26px}
+    @keyframes cloudMove{from{transform:translateX(980px)}to{transform:translateX(-220px)}}
+    .grass{position:absolute;left:0;right:0;bottom:0;height:120px;background:linear-gradient(#63cf73,#5fcf74);border-top:8px solid #2d3748;z-index:4;box-shadow:inset 0 8px 18px rgba(0,0,0,0.03)}
+
+    /* Trees and bushes */
+    .tree{position:absolute;bottom: 120px;0px}
+    .tree .trunk{width:30px;height:80px;background:#8a5a39;border:4px solid #2d3748;margin:0 auto}
+    .tree .canopy{width:110px;height:110px;background:#3fb166;border:4px solid #2d3748;border-radius:50%;margin-bottom:-30px}
+    .bush{background:#3fb166;border:4px solid #2d3748;border-radius:40px}
+
+    /* Character container + Leo parts (use container as positioning reference) */
+    .character{position:absolute;width:84px;height:200px;z-index:60}
+    /* the .leo group is the local positioned block for the parts */
+    .character .leo{position:absolute;left:0;bottom:20px;width:84px;height:160px;transform-origin:center bottom}
+    /* HEAD - centered in the leo block */
+    .leo .head{width:56px;height:56px;background:#ffd9b6;border:3px solid #2d3748;border-radius:50%;position:absolute;left:50%;transform:translateX(-50%);top:12px;z-index:12}
+    /* HAIR flush to the head (no gap) */
+    .leo .hair{position:absolute;left:50%;transform:translateX(-50%);top:8px;width:68px;height:28px;background:#4b2f17;border-radius:30px 30px 6px 6px;z-index:11;overflow:visible}
+    .leo .hair::after{content:'';position:absolute;left:8px;right:8px;bottom:-6px;height:12px;background:#4b2f17;border-radius:6px 6px 0 0}
+    /* HAT sitting directly on hair/head */
+    .leo .hat{position:absolute;left:50%;transform:translateX(-50%);top:4px;width:64px;height:30px;background:#8b5a3a;border:3px solid #2d3748;border-radius:18px 18px 6px 6px;z-index:14}
+    .leo .hat::before{content:'';position:absolute;left:6px;right:6px;bottom:-8px;height:10px;background:#8b5a3a;border:3px solid #2d3748;border-radius:6px;z-index:7}
+    .leo .hat::after{content:'';position:absolute;right:10px;top:-6px;width:10px;height:10px;background:#8b5a3a;border:3px solid #2d3748;border-radius:50%;z-index:15}
+    .leo .eyes{position:absolute;left:50%;transform:translateX(-50%);top:22px;display:flex;gap:8px}
+    .leo .eye{width:12px;height:12px;background:#fff;border-radius:50%;display:inline-block;box-shadow:inset 0 -3px 0 rgba(0,0,0,0.06);position:relative}
+    .leo .eye:after{content:'';display:block;width:6px;height:6px;background:#2d3748;border-radius:50%;position:absolute;left:50%;top:50%;transform:translate(-50%,-50%)}
+    .leo .smile{position:absolute;left:50%;transform:translateX(-50%);bottom:14px;width:18px;height:10px;border-bottom:4px solid #2d3748;border-radius:0 0 12px 12px}
+    .leo .cheek{position:absolute;width:8px;height:6px;background:#ffd0c4;border-radius:50%;left:50%;transform:translateX(-14px);top:34px;opacity:.95}
+    /* BODY (shirt) directly under head - small overlap to remove gap */
+    .leo .body{position:absolute;left:50%;transform:translateX(-50%);top:68px;width:44px;height:40px;background:#f6c94a;border:3px solid #2d3748;border-radius:8px;z-index:20}
+    /* BACKPACK behind body */
+    .leo .pack{position:absolute;left:6px;top:68px;width:18px;height:34px;background:#8b5a3a;border:3px solid #2d3748;border-radius:6px;z-index:6}
+    /* PANTS directly under shirt, centered */
+    .leo .shorts{position:absolute;left:50%;transform:translateX(-50%);top:108px;width:44px;height:36px;background:#2fb36a;border:3px solid #2d3748;border-radius:6px;z-index:18}
+    .leo .shorts::after{content:'';position:absolute;left:18px;right:18px;top:18px;height:16px;background:transparent;border-left:3px solid #2d3748;border-right:3px solid #2d3748;border-bottom:3px solid transparent;border-radius:0 0 6px 6px}
+    /* LEGS: tuck directly under shorts so there's no visual gap */
+    .leo .leg{position:absolute;width:12px;background:#ffd9b6;border:2px solid #2d3748;height:36px;top:136px}
+    .leo .leg.left{left:20px}
+    .leo .leg.right{left:52px}
+    /* SHOES positioned under corresponding legs */
+    .leo .shoe{position:absolute;width:20px;height:12px;background:#7a4f3a;border:2px solid #2d3748;border-radius:6px;top:172px}
+    .leo .shoe.left{left:16px}
+    .leo .shoe.right{left:52px}
+    /* ARMS: align with the sides of the shirt so they overlap/attach visually */
+    .leo .arm{position:absolute;width:14px;height:36px;background:#ffd9b6;border:3px solid #2d3748;border-radius:8px;top:82px}
+    .leo .arm .hand{position:absolute;width:8px;height:8px;background:#ffd9b6;border:2px solid #2d3748;border-radius:50%;bottom:2px;left:50%;transform:translateX(-50%)}
+    .leo .arm.left{left:8px;transform-origin:top left;z-index:7}
+    .leo .arm.right{left:62px;transform-origin:top right;z-index:25}
+    .leo.raise .arm.left{transform:rotate(-50deg) translate(-6px,-6px)}
+    .leo.raise .arm.right{transform:rotate(40deg) translate(6px,-6px)}
+    .leo.raise .arm .hand{bottom:12px}
+
+    .leo.idle{animation:leoIdle 2s ease-in-out infinite}
+    .leo.searching{animation:leoSearch 1s ease-in-out infinite alternate}
+    .leo.shiver{animation:leoShiver .45s ease-in-out infinite}
+    .leo.water{animation:leoWater 1.2s ease-in-out infinite}
+    .leo.walk{animation:leoWalk .9s ease-in-out infinite alternate}
+    .leo.victory{animation:leoVictory .7s ease-in-out infinite alternate}
+
+    .leo.searching .arm.left{transform:rotate(-28deg) translate(-12px,4px)}
+    .leo.searching .arm.right{transform:rotate(32deg) translate(12px,4px)}
+    .leo.searching .head{transform:translateX(-50%) rotate(-4deg)}
+    .leo.shiver .arm.left{transform:rotate(-35deg) translate(-12px,2px)}
+    .leo.shiver .arm.right{transform:rotate(35deg) translate(12px,2px)}
+    .leo.shiver .leg.left{animation:legShakeLeft .45s ease-in-out infinite}
+    .leo.shiver .leg.right{animation:legShakeRight .45s ease-in-out infinite}
+    .leo.shiver .shoe{transform:translateY(2px)}
+    .leo.water .arm.left{transform:rotate(-55deg) translate(-18px,-10px)}
+    .leo.water .arm.right{transform:rotate(50deg) translate(20px,-4px)}
+    .leo.water .head{transform:translateX(-50%) rotate(-6deg)}
+    .leo.water .shoe{transform:translateY(2px)}
+    .leo.walk .arm.left{transform:rotate(-36deg) translate(-10px,0)}
+    .leo.walk .arm.right{transform:rotate(36deg) translate(10px,0)}
+    .leo.walk .leg.left{animation:legStepLeft .9s ease-in-out infinite}
+    .leo.walk .leg.right{animation:legStepRight .9s ease-in-out infinite}
+    .leo.walk .head{transform:translateX(-50%) rotate(4deg)}
+    .leo.victory .arm.left{transform:rotate(-70deg) translate(-12px,-12px)}
+    .leo.victory .arm.right{transform:rotate(70deg) translate(12px,-12px)}
+    .leo.victory .shoe{transform:translateY(-4px)}
+    .leo.victory .head{transform:translateX(-50%) rotate(6deg)}
+    .leo.clear{animation:leoVictory .7s ease-in-out infinite alternate}
+    .leo.clear .arm.left{transform:rotate(-100deg) translate(-20px,-18px)}
+    .leo.clear .arm.right{transform:rotate(100deg) translate(20px,-18px)}
+    .leo.clear .body{transform:translateX(-50%) translateY(-2px)}
+    .leo.clear .head{transform:translateX(-50%) rotate(0deg)}
+    .leo.clear .shoe{transform:translateY(-6px)}
+    .bunny.clear{animation:bunnyHop .7s ease-in-out 3}
+
+    @keyframes leoIdle{0%{transform:translateY(0)}50%{transform:translateY(-4px)}100%{transform:translateY(0)}}
+    @keyframes leoSearch{0%{transform:translateX(0) rotate(0deg)}50%{transform:translateX(6px) rotate(3deg)}100%{transform:translateX(12px) rotate(-2deg)}}
+    @keyframes leoShiver{0%{transform:translateX(0) rotate(0deg)}25%{transform:translateX(-3px) rotate(-2deg)}50%{transform:translateX(3px) rotate(2deg)}75%{transform:translateX(-2px) rotate(-1deg)}100%{transform:translateX(0) rotate(0deg)}}
+    @keyframes leoWater{0%{transform:translateY(0) rotate(0deg)}25%{transform:translateY(-4px) rotate(-2deg)}50%{transform:translateY(-8px) rotate(2deg)}75%{transform:translateY(-4px) rotate(-1deg)}100%{transform:translateY(0) rotate(0deg)}}
+    @keyframes leoWalk{0%{transform:translateX(0) rotate(0deg)}50%{transform:translateX(8px) rotate(2deg)}100%{transform:translateX(16px) rotate(-2deg)}}
+    @keyframes leoVictory{0%{transform:translateY(0) scale(1) rotate(0deg)}100%{transform:translateY(-14px) scale(1.06) rotate(3deg)}}
+    @keyframes leoClear{0%{transform:translateY(0) scale(1)}50%{transform:translateY(-8px) scale(1.04)}100%{transform:translateY(-14px) scale(1.08)}}
+    @keyframes bunnyClear{0%{transform:translateY(0) scale(1)}50%{transform:translateY(-8px) scale(1.04)}100%{transform:translateY(-12px) scale(1.06)}}
+    @keyframes legShakeLeft{0%,100%{transform:rotate(0deg)}50%{transform:rotate(12deg)}}
+    @keyframes legShakeRight{0%,100%{transform:rotate(0deg)}50%{transform:rotate(-12deg)}}
+    @keyframes legStepLeft{0%,100%{transform:rotate(0deg)}50%{transform:rotate(10deg)}}
+    @keyframes legStepRight{0%,100%{transform:rotate(0deg)}50%{transform:rotate(-10deg)}}
+
+    /* Bunny */
+    .bunny{position:absolute;width:50px;height:68px;z-index:62}
+    .bunny .ear{position:absolute;width:14px;height:32px;border-radius:12px;background:#fff;border:3px solid #2d3748}
+    .bunny .ear::after{content:"";position:absolute;left:4px;top:6px;width:6px;height:18px;background:#ffcad4;border-radius:6px}
+    .bunny .head{position:absolute;left:7px;top:18px;width:36px;height:32px;background:#fff;border:3px solid #2d3748;border-radius:50%}
+    .bunny .eye{position:absolute;width:6px;height:6px;background:#2d3748;border-radius:50%;top:10px}
+    .bunny .eye.left{left:9px}
+    .bunny .eye.right{right:9px}
+    .bunny .nose{position:absolute;left:14px;top:18px;width:6px;height:5px;background:#ff92b0;border-radius:50%}
+    .bunny .body{position:absolute;left:9px;top:40px;width:32px;height:26px;background:#fff;border:3px solid #2d3748;border-radius:14px}
+    .bunny.happy{animation:bunnyHop .7s ease-in-out 3}
+    @keyframes bunnyHop{0%{transform:translateY(0)}50%{transform:translateY(-18px)}100%{transform:translateY(0)}}
+
+    /* Scene specific: Scene 1 */
+    #scene-1 .magic-star{position:absolute;font-size:70px;cursor:pointer;z-index:80;filter:drop-shadow(0 0 12px #f6d35a);animation:starPulse 1.6s infinite alternate}
+    #scene-1 .magic-star.multi{font-size:44px;filter:drop-shadow(0 0 6px rgba(0,0,0,0.12));animation:starPulse 1.6s infinite alternate;color:#ffffff;text-shadow:0 2px 0 rgba(0,0,0,0.25)}
+    #scene-1 .magic-star.multi.correct{color:#ffd35a;filter:drop-shadow(0 0 14px rgba(246,211,90,0.85));text-shadow:0 6px 12px rgba(246,211,90,0.35),0 2px 0 rgba(0,0,0,0.25);animation:starPulseGold 1s infinite alternate}
+    @keyframes starPulseGold{0%{transform:scale(1)}100%{transform:scale(1.25) rotate(6deg)}}
+    /* instruction label for Scene 1 */
+    .scene-instruction{position:absolute;left:50%;top:28px;transform:translateX(-50%);background:rgba(255,255,255,0.95);border:4px solid #2d3748;border-radius:14px;padding:8px 12px;font-weight:800;color:#2d3748;z-index:120}
+    @keyframes starPulse{0%{transform:scale(1)}100%{transform:scale(1.25) rotate(12deg)}}
+    .sparkle{position:absolute;width:6px;height:6px;background:#fff;border-radius:50%;box-shadow:0 0 8px #fff;opacity:.9}
+
+    /* butterflies */
+    .butterfly{position:absolute;width:28px;height:20px;z-index:70;cursor:default}
+    .butterfly .wing{width:12px;height:18px;background:#ffd1dc;border:3px solid #2d3748;border-radius:50%}
+    .butterfly .wing.right{background:#c1e1ff}
+
+    /* Scene 2 bushes */
+    .bush-row{position:absolute;bottom:60px;width:100%;display:flex;justify-content:space-around;padding:0 60px;z-index:50}
+    .search-bush{width:120px;height:86px;background:#3fb166;border:4px solid #2d3748;border-radius:56px;cursor:pointer;transition:transform .18s}
+    .search-bush:active{transform:scale(.96)}
+    .try-again{position:absolute;top:100px;left:50%;transform:translateX(-50%);background:#ff6b6b;color:#fff;padding:6px 12px;border-radius:12px;border:3px solid #2d3748;opacity:0;transition:opacity .25s}
+
+    /* Scene 3 river */
+    #scene-3{background:linear-gradient(#7fa3c9,#83c4d6);}
+    .river{position:absolute;left:50%;transform:translateX(-50%);bottom:0;height:120px;width:320px;background:#3aa0e0;border-top:4px solid #2d3748;z-index:75}
+    .bridge{position:absolute;left:50%;transform:translateX(-50%);bottom:70px;width:340px;height:48px;opacity:.5;cursor:not-allowed;z-index:80}
+    /* Bridge deck planks */
+    .bridge::before{content:'';position:absolute;left:0;right:0;top:0;height:32px;background:repeating-linear-gradient(90deg,#6b4423 0px,#6b4423 20px,#8e5229 20px,#8e5229 22px,#5c3b2a 22px,#5c3b2a 32px);border:4px solid #2d3748;border-bottom:none;z-index:2;box-shadow:inset 0 2px 4px rgba(0,0,0,0.3)}
+    /* Bridge railings left */
+    .bridge::after{content:'';position:absolute;left:0;top:2px;width:8px;height:38px;background:linear-gradient(90deg,#3d2817 0%,#5c3b2a 100%);border:3px solid #2d3748;border-right:none;z-index:3}
+    /* Bridge railings right */
+    .bridge .bridge-label{position:absolute;right:0;top:2px;width:8px;height:38px;background:linear-gradient(90deg,#5c3b2a 0%,#3d2817 100%);border:3px solid #2d3748;border-left:none;border-radius:0;color:transparent;font-size:0;z-index:3;pointer-events:none}
+    .bridge.active{opacity:1;cursor:pointer;box-shadow:0 0 14px #f6d35a}
+    .leaf{position:absolute;font-size:36px;cursor:pointer;z-index:78;transition:transform .25s,opacity .25s}
+    .log{position:absolute;font-size:34px;cursor:pointer;z-index:78;transition:transform .45s,opacity .45s}
+    .log.cleaned{transform:translateY(-56px) scale(.6);opacity:0;pointer-events:none}
+    .rain{position:absolute;inset:0;pointer-events:none}
+    .raindrop{position:absolute;width:3px;height:14px;background:rgba(255,255,255,.6);animation:fall .9s linear infinite}
+    @keyframes fall{to{transform:translateY(650px)}}
+
+    /* Scene 4 garden */
+    .flower-bed{position:absolute;bottom:60px;left:120px;right:120px;display:flex;justify-content:space-around;align-items:flex-end;z-index:70}
+    .flower{font-size:52px;cursor:pointer;filter:grayscale(.9);transition:transform .35s,filter .35s}
+    .flower.watered{filter:grayscale(0);transform:scale(1.25)}
+    /* CSS watering can (simple cartoon) */
+    .watering-can{position:absolute;width:68px;height:44px;border-radius:8px;background:#4ea6e8;border:4px solid #2d3748;cursor:pointer;z-index:90}
+    .watering-can::before{content:'';position:absolute;left:-22px;top:6px;width:24px;height:18px;border-radius:6px;background:#4ea6e8;border:4px solid #2d3748;transform:rotate(-18deg)}
+    .watering-can::after{content:'';position:absolute;right:-14px;top:10px;width:18px;height:18px;border-radius:50%;border:4px solid #2d3748;background:transparent}
+    .watering-can.active{box-shadow:0 0 10px rgba(78,166,232,0.6)}
+
+    /* Scene 5 cottage (upgraded house visuals) */
+    .cottage{position:absolute;bottom:120px;left:50%;transform:translateX(-50%);width:320px;height:220px;z-index:70}
+    /* wall with subtle shading and rounded corners */
+    .cottage .house-wall{position:absolute;left:0;right:0;bottom:0;height:160px;border-radius:12px;background:linear-gradient(180deg,#fff3d8 0%,#f7c37a 60%);border:4px solid #2d3748;box-shadow:0 10px 0 rgba(0,0,0,0.06) inset, 0 8px 18px rgba(0,0,0,0.08);z-index:71}
+    /* small foundation to give depth */
+    .cottage .foundation{position:absolute;left:8px;right:8px;bottom:-8px;height:12px;background:linear-gradient(#e0b267,#c68f4a);border-radius:6px;border:3px solid #2d3748;z-index:69}
+    /* roof triangle with eaves/overhang (lowered to sit on wall) */
+    .cottage .roof{position:absolute;left:50%;transform:translateX(-50%);top:-24px;width:0;height:0;border-left:180px solid transparent;border-right:180px solid transparent;border-bottom:92px solid #d94b4b;z-index:85}
+    /* hide the decorative roof-after strip to remove the extra red line */
+    .cottage .roof::after{display:none}
+    /* eave that overlaps the top of the wall to visually connect roof and wall */
+    .cottage .eave{position:absolute;left:50%;transform:translateX(-50%);top:56px;width:360px;height:20px;background:#b43b3b;border-top:4px solid #2d3748;border-radius:8px;z-index:87}
+    /* chimney removed */
+    /* windows */
+    .cottage .window{position:absolute;top:28px;width:70px;height:68px;background:linear-gradient(180deg,#e9fbff 0%,#cfeefc 100%);border:4px solid #2d3748;border-radius:10px;z-index:92;box-shadow:inset 0 6px 0 rgba(255,255,255,0.5)}
+    .cottage .window.left{left:34px}
+    .cottage .window.right{right:34px}
+    .cottage .window .divider.v{position:absolute;left:50%;top:8px;bottom:8px;width:4px;background:#2d3748;transform:translateX(-50%)}
+    .cottage .window .divider.h{position:absolute;left:8px;right:8px;top:50%;height:4px;background:#2d3748;transform:translateY(-50%)}
+    .cottage .window::before{content:'';position:absolute;left:8px;top:8px;right:8px;height:8px;background:rgba(255,255,255,0.45);border-radius:6px}
+    .cottage .window-sill{position:absolute;left:10px;right:10px;height:8px;bottom:-10px;background:#d29a5a;border:3px solid #2d3748;border-radius:6px;z-index:70}
+    /* door improved but preserving #door for JS */
+    .cottage .door{position:absolute;bottom:18px;left:128px;width:64px;height:100px;background:linear-gradient(180deg,#8b5a3a 0%,#5c3b2a 100%);border:4px solid #2d3748;border-radius:18px;transform-origin:left;transition:transform .8s, left .6s;z-index:93;box-shadow:inset 0 8px 0 rgba(255,255,255,0.05),0 8px 16px rgba(0,0,0,0.12)}
+    .cottage .door .knob{position:absolute;right:12px;top:48%;width:10px;height:10px;background:linear-gradient(#ffd86b,#e6b33a);border-radius:50%;border:2px solid #7a5a2c;transform:translateY(-50%);z-index:94}
+    .cottage .door.open{transform:translateX(72px) rotate(-6deg);box-shadow:0 10px 18px rgba(0,0,0,.15)}
+    /* small step in front of door */
+    .cottage .step{position:absolute;left:50%;transform:translateX(-50%);bottom:-6px;width:110px;height:14px;background:linear-gradient(#e3b57b,#c78f51);border:3px solid #2d3748;border-radius:8px;z-index:91}
+    /* pots removed — no styles needed */
+    .hidden-item{width:62px;height:62px;display:flex;align-items:center;justify-content:center;background:transparent;border-radius:14px;padding:6px;border:none;font-size:30px;cursor:pointer;position:absolute;z-index:95;transition:transform .45s,opacity .45s}
+    .hidden-item:active{transform:scale(.92)}
+
+    /* Scene 6 victory */
+    .victory{position:absolute;inset:0;background:transparent;z-index:90}
+    #scene-6 .victory{background:transparent;box-shadow:none}
+    /* scene-6 characters should be visible and animated */
+    #scene-6 .leo{z-index:220}
+    #scene-6 .bunny{z-index:220}
+    /* Ensure Leo is visible in victory and give a stronger raised pose */
+    #scene-6 .character{z-index:220}
+    #scene-6 #leo-6{display:block;opacity:1;z-index:222}
+    #scene-6 .leo.raise{animation:leoRaise .9s ease-in-out infinite alternate}
+    #scene-6 .leo.raise .arm.left{transform:rotate(-70deg) translate(-8px,-12px);left:6px;z-index:30}
+    #scene-6 .leo.raise .arm.right{transform:rotate(70deg) translate(8px,-12px);left:62px;z-index:30}
+    #scene-6 .leo.raise .arm .hand{bottom:16px}
+    @keyframes leoRaise{0%{transform:translateY(0)}100%{transform:translateY(-12px)}}
+    .leo.raise{animation:leoRaise .9s ease-in-out infinite alternate}
+    .rainbow{position:absolute;top:30px;left:8%;width:84%;height:140px;border-radius:200px 200px 0 0;border:12px solid #e74c3c;border-bottom:none;box-shadow:0 -12px 0 #f1c40f,0 -24px 0 #2ecc71,0 -36px 0 #3498db}
+    .victory-card{position:absolute;left:50%;top:54%;transform:translate(-50%,-50%);background:rgba(255,255,255,.95);padding:24px;border-radius:18px;border:5px solid #2d3748;text-align:center;z-index:100}
+    .victory-card h1{font-size:44px;color:#27ae60;margin-bottom:8px}
+    .victory-card p{font-size:18px;color:#2d3748;margin-bottom:12px}
+    .play-btn{background:#f6d35a;border:4px solid #2d3748;padding:12px 28px;border-radius:999px;font-weight:800;font-size:16px;cursor:pointer;display:inline-block;margin-top:12px}
+
+    /* confetti pieces generated by JS */
+    .confetti{position:absolute;width:10px;height:10px;border-radius:2px;z-index:110;opacity:1}
+
+    /* small utilities */
+    .hidden-el{display:none}
+  </style>
+</head>
+<body>
+  <div id="game-container">
+    <div id="hud" class="hud">
+      <div id="scene-label">Scene 1: Enchanted Forest</div>
+      <div id="hud-counter" class="counter"> </div>
+    </div>
+    <div id="feedback" class="feedback">Try Again!</div>
+
+    <!-- SCENE 1 -->
+    <div id="scene-1" class="scene active">
+      <div class="sky"></div>
+      <div class="sun"></div>
+      <div class="cloud" style="top:24px;left:680px;width:160px;animation:cloudMove 26s linear infinite"><span></span></div>
+      <div class="cloud" style="top:80px;left:300px;width:180px;animation:cloudMove 28s linear infinite;animation-delay:-8s"><span></span></div>
+      <div class="tree" style="left:36px"><div class="canopy"></div><div class="trunk"></div></div>
+      <div class="tree" style="left:220px"><div class="canopy"></div><div class="trunk"></div></div>
+      <div class="tree" style="right:36px"><div class="canopy"></div><div class="trunk"></div></div>
+      <div class="grass"></div>
+
+      <div id="star-instruction" class="scene-instruction">Find the golden star to continue!</div>
+      <div id="star-container" class="star-container"></div>
+
+      <!-- butterflies -->
+      <div class="butterfly" style="left:420px;top:180px"><div class="wing"></div><div class="wing right" style="position:absolute;left:14px"></div></div>
+      <div class="butterfly" style="left:540px;top:120px"><div class="wing"></div><div class="wing right" style="position:absolute;left:14px;background:#ffe6a6"></div></div>
+
+      <!-- Leo and Bunny (consistent) -->
+      <div class="character" style="left:96px;bottom:84px">
+        <div id="leo-1" class="leo idle">
+        <div class="hair"></div>
+        <div class="hat"></div>
+        <div class="head">
+          <div class="eyes"><div class="eye"></div><div class="eye"></div></div>
+          <div class="smile"></div>
+          <div class="cheek"></div>
+        </div>
+        <div class="pack"></div>
+        <div class="body"></div>
+        <div class="arm left"><div class="hand"></div></div>
+        <div class="arm right"><div class="hand"></div></div>
+        <div class="shorts"></div>
+        <div class="leg" style="left:24px"></div>
+        <div class="leg" style="left:52px"></div>
+        <div class="shoe" style="left:20px"></div>
+        <div class="shoe" style="left:48px"></div>
+        </div>
+      </div>
+
+      <div id="bunny-1" class="bunny" style="left:188px;bottom:84px">
+        <div class="ear" style="left:6px;transform:rotate(-8deg)"></div>
+        <div class="ear" style="right:6px;transform:rotate(8deg)"></div>
+        <div class="head"><div class="eye left"></div><div class="eye right"></div><div class="nose"></div></div>
+        <div class="body"></div>
+      </div>
+    </div>
+
+    <!-- SCENE 2: FIND THE BUNNY -->
+    <div id="scene-2" class="scene">
+      <div class="sky"></div>
+      <div class="sun"></div>
+      <div class="cloud" style="top:50px;left:650px;width:140px;animation:cloudMove 30s linear infinite"><span></span></div>
+      <div class="grass"></div>
+      <div class="character" style="left:80px;bottom:84px">
+        <div id="leo-2" class="leo">
+        <div class="hair"></div>
+        <div class="hat"></div>
+        <div class="head">
+          <div class="eyes"><div class="eye"></div><div class="eye"></div></div>
+          <div class="smile"></div>
+          <div class="cheek"></div>
+        </div>
+        <div class="pack"></div>
+        <div class="body"></div>
+        <div class="arm left"><div class="hand"></div></div>
+        <div class="arm right"><div class="hand"></div></div>
+        <div class="shorts"></div>
+        <div class="leg" style="left:24px"></div>
+        <div class="leg" style="left:52px"></div>
+        <div class="shoe" style="left:20px"></div>
+        <div class="shoe" style="left:48px"></div>
+        </div>
+      </div>
+
+      <div class="bush-row">
+        <div id="bush-0" class="search-bush" onclick="checkBush(0)"></div>
+        <div id="bush-1" class="search-bush" onclick="checkBush(1)"></div>
+        <div id="bush-2" class="search-bush" onclick="checkBush(2)"></div>
+        <div id="bush-3" class="search-bush" onclick="checkBush(3)"></div>
+      </div>
+      <div id="try-again" class="try-again">Try Again!</div>
+      <!-- hidden bunny instance used when found -->
+      <div id="bunny-2" class="bunny" style="left:220px;bottom:160px;display:none"><div class="ear" style="left:6px"></div><div class="ear" style="right:6px"></div><div class="head"><div class="eye left"></div><div class="eye right"></div><div class="nose"></div></div><div class="body"></div></div>
+    </div>
+
+    <!-- SCENE 3: RAINY RIVER -->
+    <div id="scene-3" class="scene">
+      <div class="sky"></div>
+      <div class="cloud" style="top:24px;left:720px;width:160px;animation:cloudMove 24s linear infinite"><span></span></div>
+      <div class="grass"></div>
+      <div class="river"></div>
+      <div id="bridge" class="bridge"><div class="bridge-label"></div></div>
+      <div class="character" style="left:80px;bottom:84px">
+        <div id="leo-3" class="leo">
+        <div class="hair"></div>
+        <div class="hat"></div>
+        <div class="head">
+          <div class="eyes"><div class="eye"></div><div class="eye"></div></div>
+          <div class="smile"></div>
+          <div class="cheek"></div>
+        </div>
+        <div class="pack"></div>
+        <div class="body"></div>
+        <div class="arm left"><div class="hand"></div></div>
+        <div class="arm right"><div class="hand"></div></div>
+        <div class="shorts"></div>
+        <div class="leg" style="left:24px"></div>
+        <div class="leg" style="left:52px"></div>
+        <div class="shoe" style="left:20px"></div>
+        <div class="shoe" style="left:48px"></div>
+        </div>
+      </div>
+      <div id="bunny-3" class="bunny" style="left:150px;bottom:84px"><div class="ear" style="left:6px"></div><div class="ear" style="right:6px"></div><div class="head"><div class="eye left"></div><div class="eye right"></div><div class="nose"></div></div><div class="body"></div></div>
+      <!-- leaves -->
+      <div id="leaf-0" class="leaf" style="left:420px;bottom:110px">🍃</div>
+      <div id="leaf-1" class="leaf" style="left:520px;bottom:120px">🍃</div>
+      <div id="leaf-2" class="leaf" style="left:600px;bottom:100px">🍃</div>
+      <!-- floating logs to clean the river -->
+      <div id="log-0" class="log" style="left:360px;bottom:110px">🪵</div>
+      <div id="log-1" class="log" style="left:480px;bottom:115px">🪵</div>
+      <div id="log-2" class="log" style="left:580px;bottom:105px">🪵</div>
+      <!-- rain container -->
+      <div id="rain" class="rain"></div>
+    </div>
+
+    <!-- SCENE 4: MAGIC GARDEN -->
+    <div id="scene-4" class="scene">
+      <div class="sky"></div>
+      <div class="sun"></div>
+      <div class="tree" style="left:520px"><div class="canopy"></div><div class="trunk"></div></div>
+      <div class="grass"></div>
+      <div class="character" style="left:64px;bottom:84px">
+        <div id="leo-4" class="leo">
+        <div class="hair"></div>
+        <div class="hat"></div>
+        <div class="head">
+          <div class="eyes"><div class="eye"></div><div class="eye"></div></div>
+          <div class="smile"></div>
+          <div class="cheek"></div>
+        </div>
+        <div class="pack"></div>
+        <div class="body"></div>
+        <div class="arm left"><div class="hand"></div></div>
+        <div class="arm right"><div class="hand"></div></div>
+        <div class="shorts"></div>
+        <div class="leg" style="left:24px"></div>
+        <div class="leg" style="left:52px"></div>
+        <div class="shoe" style="left:20px"></div>
+        <div class="shoe" style="left:48px"></div>
+        </div>
+      </div>
+      <div id="bunny-4" class="bunny" style="left:160px;bottom:84px"><div class="ear" style="left:6px"></div><div class="ear" style="right:6px"></div><div class="head"><div class="eye left"></div><div class="eye right"></div><div class="nose"></div></div><div class="body"></div></div>
+      <div class="watering-can" id="watering-can" title="Water" style="left:26px;bottom:140px"></div>
+      <div class="flower-bed">
+        <div id="flower-0" class="flower">🌱</div>
+        <div id="flower-1" class="flower">🌱</div>
+        <div id="flower-2" class="flower">🌱</div>
+        <div id="flower-3" class="flower">🌱</div>
+      </div>
+    </div>
+
+    <!-- SCENE 5: LITTLE HOUSE -->
+    <div id="scene-5" class="scene">
+      <div class="sky"></div>
+      <div class="sun"></div>
+      <div class="grass"></div>
+      <div class="cottage">
+        <div class="roof"></div>
+        <div class="eave"></div>
+        <div class="house-wall">
+          <div class="window left">
+            <div class="divider v"></div>
+            <div class="divider h"></div>
+            <div class="window-sill"></div>
+          </div>
+          <div id="door" class="door">
+            <div class="knob"></div>
+          </div>
+          <div class="window right">
+            <div class="divider v"></div>
+            <div class="divider h"></div>
+            <div class="window-sill"></div>
+          </div>
+          <div class="step"></div>
+        </div>
+        <div class="foundation"></div>
+      </div>
+      <div class="tree" style="left:40px"><div class="canopy"></div><div class="trunk"></div></div>
+      <div class="tree" style="right:40px"><div class="canopy"></div><div class="trunk"></div></div>
+      <div class="character" style="left:50px;bottom:120px">
+        <div id="leo-5" class="leo">
+        <div class="hair"></div>
+        <div class="hat"></div>
+        <div class="head">
+          <div class="eyes"><div class="eye"></div><div class="eye"></div></div>
+          <div class="smile"></div>
+          <div class="cheek"></div>
+        </div>
+        <div class="pack"></div>
+        <div class="body"></div>
+        <div class="arm left"><div class="hand"></div></div>
+        <div class="arm right"><div class="hand"></div></div>
+        <div class="shorts"></div>
+        <div class="leg" style="left:24px"></div>
+        <div class="leg" style="left:52px"></div>
+        <div class="shoe" style="left:20px"></div>
+        <div class="shoe" style="left:48px"></div>
+        </div>
+      </div>
+      <div id="bunny-5" class="bunny" style="left:140px;bottom:120px"><div class="ear" style="left:6px"></div><div class="ear" style="right:6px"></div><div class="head"><div class="eye left"></div><div class="eye right"></div><div class="nose"></div></div><div class="body"></div></div>
+      <!-- items (visible and clickable) -->
+      <div id="key" class="hidden-item" style="left:160px;bottom:190px">🔑</div>
+      <div id="apple" class="hidden-item" style="left:360px;bottom:80px">🍎</div>
+      <div id="book" class="hidden-item" style="left:620px;bottom:190px">📖</div>
+    </div>
+
+    <!-- SCENE 6: VICTORY -->
+    <div id="scene-6" class="scene">
+      <div class="victory"></div>
+      <div class="rainbow"></div>
+      <div class="character" style="left:200px;bottom:120px">
+        <div id="leo-6" class="leo">
+        <div class="hair"></div>
+        <div class="hat"></div>
+        <div class="head">
+          <div class="eyes"><div class="eye"></div><div class="eye"></div></div>
+          <div class="smile"></div>
+          <div class="cheek"></div>
+        </div>
+        <div class="pack"></div>
+        <div class="body"></div>
+        <div class="arm left"><div class="hand"></div></div>
+        <div class="arm right"><div class="hand"></div></div>
+        <div class="shorts"></div>
+        <div class="leg" style="left:24px"></div>
+        <div class="leg" style="left:52px"></div>
+        <div class="shoe" style="left:20px"></div>
+        <div class="shoe" style="left:48px"></div>
+        </div>
+      </div>
+      <div id="bunny-6" class="bunny" style="left:280px;bottom:120px"><div class="ear" style="left:6px"></div><div class="ear" style="right:6px"></div><div class="head"><div class="eye left"></div><div class="eye right"></div><div class="nose"></div></div><div class="body"></div></div>
+      <div class="victory-card">
+        <h1>YOU DID IT!</h1>
+        <p>You completed the Little Explorer's Adventure!</p>
+        <button id="play-again" class="play-btn">PLAY AGAIN</button>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // Game state
+    let scene = 1;
+    const totalScenes = 6;
+
+    // References
+    const scenes = {};
+    for (let i=1;i<=6;i++) scenes[i]=document.getElementById('scene-'+i);
+    const hudLabel = document.getElementById('scene-label');
+    const hudCounter = document.getElementById('hud-counter');
+    const feedback = document.getElementById('feedback');
+
+    // Initialize
+    function applyLeoSceneAnimation(n){
+      const sceneClasses = {
+        1: 'idle',
+        2: 'searching',
+        3: 'shiver',
+        4: 'water',
+        5: 'walk',
+        6: 'victory'
+      };
+
+      for (let i = 1; i <= 6; i++) {
+        const leo = document.getElementById('leo-' + i);
+        if (!leo) continue;
+        leo.classList.remove('idle', 'searching', 'shiver', 'water', 'walk', 'victory', 'raise');
+        if (sceneClasses[i]) leo.classList.add(sceneClasses[i]);
+      }
+
+      const leo6 = document.getElementById('leo-6');
+      if (leo6 && n === 6) {
+        leo6.classList.add('raise');
+      }
+    }
+
+    function triggerClearPose(){
+      if (scene < 1 || scene > 4) return;
+
+      const activeScene = document.querySelector('.scene.active');
+      if (!activeScene) return;
+
+      const leo = activeScene.querySelector('.leo');
+      const bunny = activeScene.querySelector('.bunny');
+
+      if (leo) {
+        leo.classList.remove('idle', 'searching', 'shiver', 'water', 'walk', 'victory');
+        leo.classList.add('clear');
+        leo.classList.add('victory');
+      }
+
+      if (bunny) {
+        bunny.classList.remove('happy');
+        bunny.classList.add('clear');
+        bunny.classList.add('happy');
+      }
+
+      setTimeout(() => {
+        if (leo) {
+          leo.classList.remove('clear', 'victory');
+        }
+        if (bunny) {
+          bunny.classList.remove('clear', 'happy');
+        }
+        applyLeoSceneAnimation(scene);
+      }, 1200);
+    }
+
+    function goToScene(n){
+      if(n<1||n>totalScenes) return;
+      // hide all
+      for(let i=1;i<=totalScenes;i++) scenes[i].classList.remove('active');
+      scene=n; scenes[n].classList.add('active');
+      applyLeoSceneAnimation(n);
+      updateHUD();
+      // scene-specific setup
+      if(n===1) initScene1Stars();
+      if(n===3) prepareRain();
+      if(n===6) celebrationStart();
+    }
+
+    // river log counters (define before HUD so HUD shows correct values)
+    let logsCleaned = 0;
+    const logsTotal = 3;
+    const logs = ['log-0','log-1','log-2'];
+
+    function updateHUD(){
+      hudLabel.textContent = {
+        1: 'Scene 1: Enchanted Forest',
+        2: 'Scene 2: Find the Bunny',
+        3: 'Scene 3: Rainy River',
+        4: 'Scene 4: Magic Garden',
+        5: 'Scene 5: Little House',
+        6: 'Scene 6: Victory Celebration'
+      }[scene];
+
+      // update counters per scene
+      if(scene===3){ hudCounter.textContent = `Leaves: ${collectedLeaves}/3 • Wood: ${logsCleaned}/${logsTotal}`; }
+      else if(scene===4){ hudCounter.textContent = `Flowers: ${wateredFlowers}/4`; }
+      else if(scene===5){ hudCounter.textContent = `Items Found: ${itemsFound}/3`; }
+      else hudCounter.textContent = '';
+    }
+
+    // --- Scene 1: multiple stars (one correct) ---
+    function initScene1Stars(){
+      const container = document.getElementById('star-container');
+      if(!container) return;
+      // clear any existing
+      container.innerHTML='';
+      const positions = [
+        {left:120,top:180}, {left:220,top:120}, {left:320,top:160},
+        {left:440,top:130}, {left:560,top:170}, {left:680,top:140}
+      ];
+      const correct = Math.floor(Math.random()*positions.length);
+      positions.forEach((p,i)=>{
+        const s=document.createElement('div');
+        s.className='magic-star multi';
+        s.style.left = p.left + 'px';
+        s.style.top = p.top + 'px';
+        s.textContent = '★';
+        if(i===correct){ s.dataset.correct = '1'; s.classList.add('correct'); }
+        s.addEventListener('click',()=>{
+          if(s.dataset.clicked) return; s.dataset.clicked='1';
+          if(s.dataset.correct){ createSparkles(s); triggerClearPose(); setTimeout(()=>goToScene(2),700); }
+          else { feedback.textContent='Not this one!'; feedback.style.opacity=1; setTimeout(()=>feedback.style.opacity=0,900); }
+        });
+        container.appendChild(s);
+      });
+    }
+
+    function createSparkles(parent){
+      for(let i=0;i<6;i++){
+        const s=document.createElement('div');
+        s.className='sparkle';
+        s.style.left=(Math.random()*40-20)+'px';
+        s.style.top=(Math.random()*40-20)+'px';
+        s.style.transform=`scale(${Math.random()*1.2+.6})`;
+        parent.appendChild(s);
+        (function(el){setTimeout(()=>el.remove(),800)})(s);
+      }
+    }
+
+    // --- Scene 2: find the bunny behind bushes ---
+    const correctBush = Math.floor(Math.random()*4);
+    function checkBush(index){
+      if(scene!==2) return;
+      if(index===correctBush){
+        // reveal bunny with happy hop
+        const b=document.getElementById('bunny-2'); b.style.display='block'; b.classList.add('happy');
+        setTimeout(()=>{
+          triggerClearPose();
+          // progress
+          setTimeout(()=>goToScene(3), 700);
+        },900);
+      } else {
+        showTryAgain();
+      }
+    }
+    function showTryAgain(){
+      feedback.style.opacity=1; setTimeout(()=>feedback.style.opacity=0,900);
+    }
+
+    // --- Scene 3: Collect leaves ---
+    let collectedLeaves=0;
+    const leaves=['leaf-0','leaf-1','leaf-2'];
+    leaves.forEach(id=>{
+      const el=document.getElementById(id);
+      el.addEventListener('click',()=>{
+        if(scene!==3) return;
+        if(el.dataset.collected) return;
+        el.dataset.collected=1;
+        collectedLeaves++;
+        el.style.transform='scale(.2) translateY(-20px)';
+        el.style.opacity=0;
+        // sparkle
+        createSparkles(el);
+        updateHUD();
+        if(collectedLeaves===3){
+          // enable bridge and show NEXT label
+          const bridgeEl = document.getElementById('bridge');
+          bridgeEl.classList.add('active');
+          const lbl = bridgeEl.querySelector('.bridge-label');
+          if(lbl){ lbl.textContent = 'NEXT'; lbl.style.opacity = 1; }
+          // add click listener once
+          if(!bridgeEl._hasClick){ bridgeEl.addEventListener('click',()=>{ goToScene(4); }); bridgeEl._hasClick = true; }
+        }
+      });
+    });
+      // --- Scene 3: Clean floating wood (logs) ---
+      logs.forEach(id=>{
+      const el=document.getElementById(id);
+      if(!el) return;
+      el.addEventListener('click',()=>{
+        if(scene!==3) return;
+        if(el.dataset.cleaned) return;
+        el.dataset.cleaned = 1;
+        // animate float away and fade
+        el.classList.add('cleaned');
+        logsCleaned++;
+        createSparkles(el);
+        updateHUD();
+        // when all cleaned, show a brief message
+        if(logsCleaned===logsTotal){ feedback.textContent='River clean!'; feedback.style.opacity=1; setTimeout(()=>{feedback.style.opacity=0; feedback.textContent='Try Again!';},900); }
+      });
+    });
+
+
+    function prepareRain(){
+      // create raindrops
+      const rain=document.getElementById('rain'); rain.innerHTML='';
+      for(let i=0;i<35;i++){
+        const d=document.createElement('div'); d.className='raindrop';
+        d.style.left=(Math.random()*880)+'px'; d.style.top=-(Math.random()*200)+'px'; d.style.animationDelay=(Math.random()*-1)+'s';
+        rain.appendChild(d);
+      }
+      updateHUD();
+    }
+
+    // --- Scene 4: Water flowers ---
+    let wateringMode=false; let wateredFlowers=0;
+    const wateringCan=document.getElementById('watering-can');
+    wateringCan.addEventListener('click',()=>{
+      wateringMode=!wateringMode;
+      if(wateringMode){ wateringCan.classList.add('active'); } else { wateringCan.classList.remove('active'); }
+    });
+    for(let i=0;i<4;i++){
+      const f=document.getElementById('flower-'+i);
+      f.addEventListener('click',()=>{
+        if(scene!==4) return;
+        if(wateringMode && !f.classList.contains('watered')){
+          f.classList.add('watered'); wateredFlowers++;
+          createSparkles(f);
+          updateHUD();
+          // small water droplet animation
+          const drop=document.createElement('div'); drop.textContent='💧'; drop.style.position='absolute'; drop.style.left=(f.getBoundingClientRect().left - document.getElementById('game-container').getBoundingClientRect().left + 18)+'px'; drop.style.top=(f.getBoundingClientRect().top - document.getElementById('game-container').getBoundingClientRect().top -20)+'px'; drop.style.fontSize='22px'; drop.style.zIndex=200; document.getElementById('game-container').appendChild(drop);
+          setTimeout(()=>drop.remove(),700);
+          if(wateredFlowers===4){ triggerClearPose(); setTimeout(()=>goToScene(5),900); }
+        } else {
+          // prompt to use watering can
+          feedback.textContent='Click the watering can first!'; feedback.style.opacity=1; setTimeout(()=>{feedback.style.opacity=0; feedback.textContent='Try Again!'},900);
+        }
+      });
+    }
+
+    // --- Scene 5: Find 3 items and unlock door ---
+    let itemsFound=0; const items=['key','apple','book'];
+    // place items in visible spots (make them clickable)
+    document.getElementById('key').classList.remove('hidden');
+    document.getElementById('apple').classList.remove('hidden');
+    document.getElementById('book').classList.remove('hidden');
+    // animate item collection toward HUD
+    function collectItem(el){
+      if(scene!==5) return;
+      if(el.dataset.gone) return;
+      const rect = el.getBoundingClientRect();
+      const containerRect = document.getElementById('game-container').getBoundingClientRect();
+      const clone = el.cloneNode(true);
+      clone.style.position='absolute';
+      clone.style.left = (rect.left - containerRect.left) + 'px';
+      clone.style.top = (rect.top - containerRect.top) + 'px';
+      clone.style.margin=0; clone.style.zIndex=220; clone.style.transition='all .8s ease';
+      document.getElementById('game-container').appendChild(clone);
+      // target: HUD center
+      const hud = document.getElementById('hud');
+      const hudRect = hud.getBoundingClientRect();
+      const targetX = hudRect.left - containerRect.left + hudRect.width/2 - 12;
+      const targetY = hudRect.top - containerRect.top + hudRect.height/2 - 12;
+      // fade original
+      el.style.opacity=0; el.dataset.gone=1;
+      setTimeout(()=>{
+        clone.style.left = targetX + 'px';
+        clone.style.top = targetY + 'px';
+        clone.style.transform = 'scale(.3)';
+        clone.style.opacity = '0';
+      },40);
+      setTimeout(()=>{ createSparkles(clone); clone.remove(); itemsFound++; updateHUD();
+        // when all found, open door and continue
+        if(itemsFound===3){ document.getElementById('door').classList.add('open'); triggerClearPose(); setTimeout(()=>goToScene(6),900); }
+      },900);
+    }
+
+    items.forEach(id=>{
+      const el=document.getElementById(id);
+      el.addEventListener('click',()=>{ collectItem(el); });
+    });
+
+    // --- Scene 6: Victory and reset ---
+    function celebrationStart(){
+      // animate Leo and Bunny
+      const leo6 = document.getElementById('leo-6'); if(leo6) leo6.classList.add('raise');
+      const bunny=document.getElementById('bunny-6'); if(bunny) bunny.classList.add('happy');
+      spawnConfetti();
+    }
+    document.getElementById('play-again').addEventListener('click',resetGame);
+
+    function spawnConfetti(){
+      const container=document.getElementById('game-container');
+      // create many pieces
+      for(let i=0;i<40;i++){
+        const c=document.createElement('div'); c.className='confetti';
+        c.style.left=(Math.random()*880)+'px'; c.style.top='-20px';
+        const colors=['#f44336','#f6d35a','#4ea6e8','#2ecc71','#ff92b0']; c.style.background=colors[Math.floor(Math.random()*colors.length)];
+        c.style.transform='rotate('+Math.random()*360+'deg)';
+        c.style.transition='transform 2.5s linear, top 2.5s linear, opacity 2.5s linear';
+        container.appendChild(c);
+        setTimeout(()=>{c.style.top=(520+Math.random()*60)+'px';c.style.opacity=0;},50+i*10);
+        setTimeout(()=>c.remove(),3200);
+      }
+    }
+
+    // reset/game start
+    function resetGame(){
+      // reset variables
+      collectedLeaves=0; wateredFlowers=0; itemsFound=0;
+      // reset leaves
+      leaves.forEach(id=>{const el=document.getElementById(id); if(el){el.style.opacity=1;el.style.transform='none';el.dataset.collected='';}});
+      // reset logs
+      logsCleaned = 0;
+      logs.forEach(id=>{const el=document.getElementById(id); if(el){el.style.opacity=1;el.style.transform='none';el.classList.remove('cleaned'); el.dataset.cleaned='';}});
+      document.getElementById('bridge').classList.remove('active');
+      // reset flowers
+      for(let i=0;i<4;i++){const f=document.getElementById('flower-'+i); f.classList.remove('watered');}
+      wateringMode=false; if(wateringCan) wateringCan.classList.remove('active');
+      // reset items
+      items.forEach(id=>{const el=document.getElementById(id); el.dataset.gone=''; el.style.opacity=1; el.style.transform='none';});
+      document.getElementById('door').classList.remove('open');
+      // clear victory animations
+      const leo6 = document.getElementById('leo-6'); if(leo6) leo6.classList.remove('raise');
+      const bunny6 = document.getElementById('bunny-6'); if(bunny6) bunny6.classList.remove('happy');
+      // hide bunny2
+      document.getElementById('bunny-2').style.display='none';
+      // pick new bush
+      // choose random bush
+      // (we simply reload correctBush var by randomizing and reloading page-level value)
+      // re-initialize
+      updateHUD();
+      goToScene(1);
+    }
+
+    // initial HUD update
+    updateHUD();
+    // initialize scene 1 stars on load
+    initScene1Stars();
+
+    // small utilities
+    // randomize correct bush each run
+    // note: using closure variable set at load - we'll reassign on reset
+    function randomizeBush(){ window.correctBush = Math.floor(Math.random()*4); }
+    randomizeBush();
+
+    // expose checkBush to global
+    window.checkBush = function(i){ if(scene!==2) return; if(i===window.correctBush){ const b=document.getElementById('bunny-2'); b.style.display='block'; b.classList.add('happy'); setTimeout(()=>goToScene(3),900);} else { showTryAgain(); }}
+
+    // expose goToScene for some clickable elements
+    window.goToScene = goToScene;
+
+    // leaf setup
+    document.getElementById('leaf-0').addEventListener('click',()=>{});
+
+    // items visibility: small random positions for scene 5 items to make them 'hidden'
+    (function placeItems(){ const key=document.getElementById('key'); const apple=document.getElementById('apple'); const book=document.getElementById('book'); if(!key||!apple||!book) return; // place slightly varied
+      key.style.left = '160px'; key.style.bottom='190px'; key.classList.add('hidden-item');
+      apple.style.left='360px'; apple.style.bottom='80px'; apple.classList.add('hidden-item');
+      book.style.left='620px'; book.style.bottom='190px'; book.classList.add('hidden-item');
+    })();
+
+    // make leaves clickable handlers already attached above; but need to ensure updateHUD when scene3 entered
+
+    // when walking to scene 3 ensure HUD shows leaves
+    // Listen to scene changes for HUD updates
+    // small touch support for tapping elements
+    ['touchstart','click'].forEach(evt=>{
+      document.addEventListener(evt,(e)=>{
+        // update HUD counters frequently
+        updateHUD();
+      },{passive:true});
+    });
+
+    // ensure bush randomization when replay
+    document.getElementById('play-again').addEventListener('click',()=>{ randomizeBush(); resetGame(); });
+
+  </script>
+</body>
+</html>
